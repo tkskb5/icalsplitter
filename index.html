@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iCAL Splitter - 大容量カレンダーファイル分割ツール</title>
+  <meta name="description" content="大容量のiCAL(.ics)ファイルを、Googleカレンダーにインポート可能なサイズに分割するWebツール。サーバーにアップロードせず、ブラウザ内で完結。">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- JSZip for ZIP download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+
+<body>
+  <div class="container">
+    <!-- ヘッダー -->
+    <header class="header">
+      <h1 class="header__title">📅 iCAL Splitter</h1>
+      <p class="header__subtitle">大容量カレンダーファイルを分割して、Googleカレンダーにインポート</p>
+    </header>
+
+    <!-- ファイルアップロード -->
+    <section class="card">
+      <h2 class="card__title">
+        <span class="card__title-icon">📁</span>
+        ファイルを選択
+      </h2>
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone__icon">📤</div>
+        <p class="dropzone__text">ここにiCALファイルをドラッグ&ドロップ</p>
+        <p class="dropzone__hint">または クリックしてファイルを選択</p>
+        <input type="file" id="fileInput" accept=".ics,.ical" hidden>
+      </div>
+    </section>
+
+    <!-- ファイル情報 -->
+    <section class="card file-info" id="fileInfoSection">
+      <h2 class="card__title">
+        <span class="card__title-icon">📊</span>
+        ファイル情報
+      </h2>
+
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-item__value" id="statFileSize">-</div>
+          <div class="stat-item__label">ファイルサイズ</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-item__value" id="statEventCount">-</div>
+          <div class="stat-item__label">イベント数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-item__value" id="statDateRange">-</div>
+          <div class="stat-item__label">期間</div>
+        </div>
+      </div>
+
+      <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--color-text-secondary);">年別イベント数</h3>
+      <div class="year-chart" id="yearChart"></div>
+    </section>
+
+    <!-- 分割オプション -->
+    <section class="card split-options" id="splitOptionsSection">
+      <h2 class="card__title">
+        <span class="card__title-icon">✂️</span>
+        分割方法を選択
+      </h2>
+
+      <div class="tabs">
+        <button class="tab tab--active" data-tab="byDate">📆 期間で分割</button>
+        <button class="tab" data-tab="bySize">📦 サイズで分割</button>
+        <button class="tab" data-tab="byYear">📁 年別で分割</button>
+      </div>
+
+      <!-- 期間で分割 -->
+      <div class="tab-panel tab-panel--active" id="panel-byDate">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="startDate">開始日（この日以降を含める）</label>
+            <input type="date" class="form-input" id="startDate">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="endDate">終了日（この日まで含める）</label>
+            <input type="date" class="form-input" id="endDate">
+          </div>
+        </div>
+        <p class="form-hint">💡 例：「2020年以前を削除」→ 開始日に2021-01-01を設定</p>
+        <button class="btn btn--primary btn--full mt-2" id="splitByDateBtn">
+          📥 期間でフィルタして出力
+        </button>
+      </div>
+
+      <!-- サイズで分割 -->
+      <div class="tab-panel" id="panel-bySize">
+        <div class="form-group">
+          <label class="form-label" for="maxSize">1ファイルあたりの最大サイズ (KB)</label>
+          <input type="number" class="form-input" id="maxSize" value="500" min="100" max="5000">
+        </div>
+        <p class="form-hint">💡 Googleカレンダーのインポート上限は約1MB。500KB推奨。</p>
+
+        <div class="form-group mt-2">
+          <label class="checkbox-label">
+            <input type="checkbox" id="cleanMode" checked>
+            <span class="checkbox-text">🧹 Googleカレンダー互換モード</span>
+          </label>
+          <p class="form-hint" style="margin-left: 1.5rem;">Apple固有プロパティ（リマインダー設定等）を除去してインポートエラーを防止</p>
+        </div>
+
+        <button class="btn btn--primary btn--full mt-2" id="splitBySizeBtn">
+          📥 サイズで分割
+        </button>
+      </div>
+
+      <!-- 年別で分割 -->
+      <div class="tab-panel" id="panel-byYear">
+        <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
+          年ごとに自動でファイルを分割します。各ファイルは該当年のイベントのみを含みます。
+        </p>
+        <button class="btn btn--primary btn--full" id="splitByYearBtn">
+          📥 年別で分割
+        </button>
+      </div>
+    </section>
+
+    <!-- 進捗 -->
+    <div class="progress" id="progressSection">
+      <div class="progress__bar-container">
+        <div class="progress__bar" id="progressBar"></div>
+      </div>
+      <p class="progress__text" id="progressText">処理中...</p>
+    </div>
+
+    <!-- 結果 -->
+    <section class="card results" id="resultsSection">
+      <h2 class="card__title">
+        <span class="card__title-icon">✅</span>
+        分割完了
+      </h2>
+
+      <div class="result-files" id="resultFiles"></div>
+
+      <button class="btn btn--secondary btn--full mt-3" id="downloadAllBtn">
+        📦 すべてZIPでダウンロード
+      </button>
+    </section>
+
+    <!-- フッター -->
+    <footer class="footer">
+      <p>🔒 プライバシー優先：ファイルはサーバーに送信されず、ブラウザ内で処理されます</p>
+      <p class="mt-1">
+        <a href="https://github.com" target="_blank">GitHub</a> ·
+        <a href="https://datatracker.ietf.org/doc/html/rfc5545" target="_blank">RFC 5545</a>
+      </p>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/ical-parser.js"></script>
+  <script src="js/ical-writer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>
